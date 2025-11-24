@@ -240,4 +240,63 @@ def mbti_info_page():
         st.markdown(f"<div style='font-size: 1.1em; padding: 10px; border-left: 5px solid {MBTI_STYLE[selected_mbti]['color']}; margin-bottom: 20px;'>{mbti_data['desc']}</div>", unsafe_allow_html=True)
         
         # 3. 통계 정보 및 멘트 (HTML/CSS로 디자인된 박스)
-        insights = generate_insights
+        insights = generate_insights(df, selected_mbti)
+        st.markdown(insights["ment"], unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # --- 시각화 섹션 (삐까뻔쩍함 극대화) ---
+        
+        # 3. 통계 정보를 보여주고 (세계 지도 추가)
+        st.subheader("🌐 MBTI 유형의 전 세계 분포")
+        st.plotly_chart(create_mbti_choropleth_map(df, selected_mbti), use_container_width=True)
+        
+        st.markdown("---")
+        
+        st.subheader("📊 국가별 MBTI 비율 순위")
+        # 3. 통계 정보를 보여주고 (바 차트)
+        st.plotly_chart(create_mbti_bar_chart(df, selected_mbti), use_container_width=True)
+        
+    elif not DATA_LOADED:
+        st.error("데이터 로드에 실패하여 정보를 표시할 수 없습니다. CSV 파일(countriesMBTI_16types.csv)이 동일한 폴더에 있는지 확인해주세요.")
+    else:
+        st.error(f"선택된 MBTI 유형 ({selected_mbti})에 대한 설명 데이터가 부족합니다.")
+
+# --- 5. 메인 앱 실행 함수 ---
+
+def main_app():
+    """메인 페이지 라우팅 및 사이드바 메뉴를 설정합니다."""
+    
+    # 메인 네비게이션 메뉴 (Option Menu 사용) - 페이지 전환 역할
+    selected_page = option_menu(
+        menu_title=None,
+        options=["홈 🏠", "MBTI 정보 탐색 🧠"],
+        icons=["house", "brain"],
+        default_index=0,
+        orientation="horizontal",
+        key="main_navigation",
+        styles={
+            "container": {"padding": "0!important"},
+            "icon": {"color": "#5b92e5"},
+            "nav-link-selected": {"background-color": "#5b92e5"},
+        }
+    )
+    
+    # 사이드바 내용 추가
+    st.sidebar.markdown(f"### 📚 **MBTI 탐험 메뉴**")
+    st.sidebar.info(f"✨ 현재 페이지: **{selected_page}**")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("이 웹앱은 Streamlit, Plotly, Pandas 라이브러리를 사용하여 개발되었습니다.")
+    
+    # 페이지 렌더링
+    if selected_page == "홈 🏠":
+        home_page()
+    elif selected_page == "MBTI 정보 탐색 🧠":
+        mbti_info_page()
+
+if __name__ == "__main__":
+    if not DATA_LOADED:
+        st.title("❌ 데이터 로드 오류")
+        st.error("CSV 파일(countriesMBTI_16types.csv)을 찾을 수 없거나 로드에 실패했습니다. 파일을 확인해 주세요.")
+    else:
+        main_app()
