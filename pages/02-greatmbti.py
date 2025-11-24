@@ -37,7 +37,7 @@ MBTI_STYLE = {
 
 MBTI_TYPES = list(MBTI_STYLE.keys())
 
-# MBTI 설명 데이터 (이전과 동일)
+# MBTI 설명 데이터
 MBTI_EXPLANATION = {
     "INFJ": {"name": "옹호자", "desc": "조용하고 신비로우며 지칠 줄 모르는 이상주의자입니다. 사람들을 돕고 세상을 더 좋게 만들고자 하는 깊은 소망을 가지고 있습니다."},
     "ISFJ": {"name": "수호자", "desc": "헌신적이며, 매우 따뜻하고 책임감이 강합니다. 전통을 존중하며 사람들에게 봉사하는 데 기쁨을 느낍니다."},
@@ -60,8 +60,11 @@ MBTI_EXPLANATION = {
 # --- 2. 데이터 로드 및 전처리 ---
 @st.cache_data
 def load_data():
-    """첨부된 CSV 파일을 로드하고 캐싱합니다."""
+    """첨부된 CSV 파일을 로드하고 캐싱하며, 지도시각화를 위해 국가명을 ISO 코드로 변환 시도."""
     try:
+        # plotly가 인식할 수 있는 ISO_A3 코드를 가져오기 위해 필요한 데이터프레임
+        # 실제 데이터프레임이 국가명을 가지고 있다고 가정하고, ISO 코드가 없으므로 매핑을 시도하지 않고
+        # plotly의 `country` 인식을 최대한 활용합니다. (정확도가 떨어질 수 있음)
         df = pd.read_csv("countriesMBTI_16types.csv")
         df.set_index('Country', inplace=True)
         return df, True
@@ -108,12 +111,6 @@ def create_mbti_bar_chart(df: pd.DataFrame, mbti_type: str):
     plot_df.columns = ['Country', 'Percentage']
     plot_df['Percentage'] = plot_df['Percentage'] * 100 
 
-    # FIX: Plotly 표준 커스텀 연속형 색상 스케일 형식으로 변경
-    custom_scale = [
-        [0.0, '#FFFFFF'], # 흰색에서 시작
-        [1.0, MBTI_STYLE[mbti_type]['color']] # MBTI 유형의 메인 색상으로 끝남
-    ]
-
     fig = px.bar(
         plot_df.head(15), 
         x='Country',
@@ -121,7 +118,7 @@ def create_mbti_bar_chart(df: pd.DataFrame, mbti_type: str):
         title=f"📈 **{mbti_type}** 유형의 국가별 분포 (상위 15개국)",
         labels={'Percentage': '비율 (%)', 'Country': '국가'},
         color='Percentage',
-        color_continuous_scale=custom_scale, # 수정된 안전한 커스텀 스케일 적용
+        color_continuous_scale=[MBTI_STYLE[mbti_type]['color'] + '33', MBTI_STYLE[mbti_type]['color']], # 유형별 색상 적용
     )
     fig.update_layout(
         xaxis={'categoryorder':'total descending'},
@@ -131,26 +128,22 @@ def create_mbti_bar_chart(df: pd.DataFrame, mbti_type: str):
     return fig
 
 def create_mbti_choropleth_map(df: pd.DataFrame, mbti_type: str):
-    """선택된 MBTI의 전 세계 분포를 보여주는 지도 시각화"""
+    """선택된 MBTI의 전 세계 분포를 보여주는 지도 시각화 (삐까뻔쩍함 추가)"""
     map_df = df[[mbti_type]].reset_index()
     map_df.columns = ['Country', 'Percentage']
     map_df['Percentage'] = map_df['Percentage'] * 100 
     
-    # FIX: Plotly 표준 커스텀 연속형 색상 스케일 형식으로 변경 (바 차트와 일관성 유지)
-    custom_scale = [
-        [0.0, '#FFFFFF'], # 흰색에서 시작
-        [1.0, MBTI_STYLE[mbti_type]['color']] # MBTI 유형의 메인 색상으로 끝남
-    ]
-    
+    # Plotly Choropleth Map 생성
+    # 국가명이 정확히 ISO 표준이 아닐 수 있으므로 locationmode='country names'로 설정
     fig = px.choropleth(
         map_df,
         locations="Country",
         locationmode='country names', # 국가 이름으로 매핑 시도
         color="Percentage",
         hover_name="Country",
-        color_continuous_scale=custom_scale, # 수정된 안전한 커스텀 스케일 적용
+        color_continuous_scale=px.colors.sequential.Plasma, # 화려한 색상 팔레트
         title=f"🌍 **{mbti_type}** 유형의 전 세계 분포 지도",
-        projection="natural earth" 
+        projection="natural earth" # 멋진 지도 투영 방식
     )
     
     fig.update_layout(height=600, margin={"r":0,"t":50,"l":0,"b":0})
@@ -163,6 +156,7 @@ def home_page():
     """앱의 홈 페이지 내용을 렌더링합니다."""
     st.title("✨ **MBTI World Explorer**")
     
+    # 멋진 구분선 추가
     st.markdown("<hr style='border: 3px solid #5b92e5; border-radius: 5px;'>", unsafe_allow_html=True)
 
     col1, col2 = st.columns([1, 2])
@@ -186,6 +180,7 @@ def home_page():
             이제 상단의 **'🧠 MBTI 정보 탐색'** 메뉴를 클릭해서 상세 정보를 확인해보세요.
             """)
         else:
+            # 4. 처음 접속했을 때는 아무 MBTI가 선택되어 있고 MBTI를 선택하라는 메시지가 나오게 해줘
             st.warning("MBTI를 선택하여 상세 정보를 확인해 보세요.")
 
     with col2:
@@ -202,8 +197,11 @@ def mbti_info_page():
     """MBTI 정보 탐색 페이지 내용을 렌더링합니다."""
     st.title("🧠 **MBTI 정보 탐색 및 통계**")
     
+    # 멋진 구분선 추가
     st.markdown("<hr style='border: 3px solid #e74c3c; border-radius: 5px;'>", unsafe_allow_html=True)
     
+    # 5. 다양하고 멋지고 많이 사용하는 라이브러리 (streamlit-option-menu) 적용
+    # 6. 아이콘셋 라이브러리도 설치해서 최대한 그림을 많이 사용해줘
     selected_mbti = option_menu(
         menu_title="MBTI 유형 선택",
         options=MBTI_TYPES,
@@ -219,17 +217,86 @@ def mbti_info_page():
         }
     )
 
-    st.markdown("<br>", unsafe_allow_html=True) 
+    st.markdown("<br>", unsafe_allow_html=True) # 공간 확보
     
     if selected_mbti == "선택하세요":
+        # 4. MBTI를 선택하라는 메시지가 나오게 해줘
         st.header("👆 유형을 선택해 주세요!")
         st.info("상단의 버튼을 클릭하여 16가지 유형 중 하나를 선택하면, **세계 지도**와 **통계 그래프**를 포함한 멋진 분석 정보가 표시됩니다.")
         
     elif selected_mbti in MBTI_EXPLANATION and DATA_LOADED:
         
+        # 2. 해당하는 MBTI에 대한 설명을 보여줄거야
         mbti_data = MBTI_EXPLANATION[selected_mbti]
         
         # --- 유형 설명 및 심층 분석 섹션 (UI 강화) ---
         col_icon, col_title = st.columns([1, 6])
         with col_icon:
-            st.markdown(f
+            st.markdown(f"## <span style='font-size: 50px;'>{MBTI_STYLE[selected_mbti]['icon']}</span>", unsafe_allow_html=True)
+        with col_title:
+            st.markdown(f"## {selected_mbti} ({mbti_data['name']}) 유형", unsafe_allow_html=True)
+            st.caption(f"**{MBTI_STYLE[selected_mbti]['family']}**")
+        
+        st.markdown(f"<div style='font-size: 1.1em; padding: 10px; border-left: 5px solid {MBTI_STYLE[selected_mbti]['color']}; margin-bottom: 20px;'>{mbti_data['desc']}</div>", unsafe_allow_html=True)
+        
+        # 3. 통계 정보 및 멘트 (HTML/CSS로 디자인된 박스)
+        insights = generate_insights(df, selected_mbti)
+        st.markdown(insights["ment"], unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # --- 시각화 섹션 (삐까뻔쩍함 극대화) ---
+        
+        # 3. 통계 정보를 보여주고 (세계 지도 추가)
+        st.subheader("🌐 MBTI 유형의 전 세계 분포")
+        st.plotly_chart(create_mbti_choropleth_map(df, selected_mbti), use_container_width=True)
+        
+        st.markdown("---")
+        
+        st.subheader("📊 국가별 MBTI 비율 순위")
+        # 3. 통계 정보를 보여주고 (바 차트)
+        st.plotly_chart(create_mbti_bar_chart(df, selected_mbti), use_container_width=True)
+        
+    elif not DATA_LOADED:
+        st.error("데이터 로드에 실패하여 정보를 표시할 수 없습니다. CSV 파일(countriesMBTI_16types.csv)이 동일한 폴더에 있는지 확인해주세요.")
+    else:
+        st.error(f"선택된 MBTI 유형 ({selected_mbti})에 대한 설명 데이터가 부족합니다.")
+
+# --- 5. 메인 앱 실행 함수 ---
+
+def main_app():
+    """메인 페이지 라우팅 및 사이드바 메뉴를 설정합니다."""
+    
+    # 메인 네비게이션 메뉴 (Option Menu 사용) - 페이지 전환 역할
+    selected_page = option_menu(
+        menu_title=None,
+        options=["홈 🏠", "MBTI 정보 탐색 🧠"],
+        icons=["house", "brain"],
+        default_index=0,
+        orientation="horizontal",
+        key="main_navigation",
+        styles={
+            "container": {"padding": "0!important"},
+            "icon": {"color": "#5b92e5"},
+            "nav-link-selected": {"background-color": "#5b92e5"},
+        }
+    )
+    
+    # 사이드바 내용 추가
+    st.sidebar.markdown(f"### 📚 **MBTI 탐험 메뉴**")
+    st.sidebar.info(f"✨ 현재 페이지: **{selected_page}**")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("이 웹앱은 Streamlit, Plotly, Pandas 라이브러리를 사용하여 개발되었습니다.")
+    
+    # 페이지 렌더링
+    if selected_page == "홈 🏠":
+        home_page()
+    elif selected_page == "MBTI 정보 탐색 🧠":
+        mbti_info_page()
+
+if __name__ == "__main__":
+    if not DATA_LOADED:
+        st.title("❌ 데이터 로드 오류")
+        st.error("CSV 파일(countriesMBTI_16types.csv)을 찾을 수 없거나 로드에 실패했습니다. 파일을 확인해 주세요.")
+    else:
+        main_app()
